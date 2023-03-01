@@ -1,7 +1,16 @@
 #!/bin/bash
 
+# Define Mysql Connection
+if [[ -z "${DBCONNECTION}" || "${DBCONNECTION}" == "unix" ]]; then
+    DBCONNECTION_STR="--socket=/var/run/mysqld/mysqld.sock"
+    DBCONNECTION_STR_CF="${DBCONNECTION_STR_CF}"
+else
+    DBCONNECTION_STR="--host=${DBCONNECTION}"
+    DBCONNECTION_STR_CF="mysql://${DBUSER}:${DBPASS}@${DBCONNECTION}/${DBNAME}"
+fi
+
 # Wait for MySQL to warm-up
-while ! mysqladmin status --socket=/var/run/mysqld/mysqld.sock -u${DBUSER} -p${DBPASS} --silent; do
+while ! mysqladmin status ${DBCONNECTION_STR} -u${DBUSER} -p${DBPASS} --silent; do
   echo "Waiting for database to come up..."
   sleep 2
 done
@@ -14,11 +23,11 @@ do
 done
 
 # Wait for updated schema
-DBV_NOW=$(mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "SELECT version FROM versions WHERE application = 'db_schema';" -BN)
+DBV_NOW=$(mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "SELECT version FROM versions WHERE application = 'db_schema';" -BN)
 DBV_NEW=$(grep -oE '\$db_version = .*;' init_db.inc.php | sed 's/$db_version = //g;s/;//g' | cut -d \" -f2)
 while [[ "${DBV_NOW}" != "${DBV_NEW}" ]]; do
   echo "Waiting for schema update..."
-  DBV_NOW=$(mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "SELECT version FROM versions WHERE application = 'db_schema';" -BN)
+  DBV_NOW=$(mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "SELECT version FROM versions WHERE application = 'db_schema';" -BN)
   DBV_NEW=$(grep -oE '\$db_version = .*;' init_db.inc.php | sed 's/$db_version = //g;s/;//g' | cut -d \" -f2)
   sleep 5
 done
@@ -27,9 +36,9 @@ echo "DB schema is ${DBV_NOW}"
 # Recreate view
 if [[ "${MASTER}" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
   echo "We are master, preparing sogo_view..."
-  mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "DROP VIEW IF EXISTS sogo_view"
+  mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "DROP VIEW IF EXISTS sogo_view"
   while [[ ${VIEW_OK} != 'OK' ]]; do
-    mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} << EOF
+    mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} << EOF
 CREATE VIEW sogo_view (c_uid, domain, c_name, c_password, c_cn, mail, aliases, ad_aliases, ext_acl, kind, multiple_bookings) AS 
 SELECT
    mailbox.username,
@@ -59,7 +68,7 @@ WHERE
 GROUP BY
    mailbox.username;
 EOF
-    if [[ ! -z $(mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "SELECT 'OK' FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'sogo_view'") ]]; then
+    if [[ ! -z $(mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "SELECT 'OK' FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'sogo_view'") ]]; then
       VIEW_OK=OK
     else
       echo "Will retry to setup SOGo view in 3s..."
@@ -68,7 +77,7 @@ EOF
   done
 else
   while [[ ${VIEW_OK} != 'OK' ]]; do
-    if [[ ! -z $(mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "SELECT 'OK' FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'sogo_view'") ]]; then
+    if [[ ! -z $(mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "SELECT 'OK' FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'sogo_view'") ]]; then
       VIEW_OK=OK
     else
       echo "Waiting for SOGo view to be created by master..."
@@ -81,12 +90,12 @@ fi
 if [[ "${MASTER}" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
   echo "We are master, preparing _sogo_static_view..."
   while [[ ${STATIC_VIEW_OK} != 'OK' ]]; do
-    if [[ ! -z $(mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "SELECT 'OK' FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '_sogo_static_view'") ]]; then
+    if [[ ! -z $(mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "SELECT 'OK' FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '_sogo_static_view'") ]]; then
       STATIC_VIEW_OK=OK
       echo "Updating _sogo_static_view content..."
       # If changed, also update init_db.inc.php
-      mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "REPLACE INTO _sogo_static_view (c_uid, domain, c_name, c_password, c_cn, mail, aliases, ad_aliases, ext_acl, kind, multiple_bookings) SELECT c_uid, domain, c_name, c_password, c_cn, mail, aliases, ad_aliases, ext_acl, kind, multiple_bookings from sogo_view;"
-      mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "DELETE FROM _sogo_static_view WHERE c_uid NOT IN (SELECT username FROM mailbox WHERE active = '1')"
+      mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "REPLACE INTO _sogo_static_view (c_uid, domain, c_name, c_password, c_cn, mail, aliases, ad_aliases, ext_acl, kind, multiple_bookings) SELECT c_uid, domain, c_name, c_password, c_cn, mail, aliases, ad_aliases, ext_acl, kind, multiple_bookings from sogo_view;"
+      mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "DELETE FROM _sogo_static_view WHERE c_uid NOT IN (SELECT username FROM mailbox WHERE active = '1')"
     else
       echo "Waiting for database initialization..."
       sleep 3
@@ -94,7 +103,7 @@ if [[ "${MASTER}" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
   done
 else
   while [[ ${STATIC_VIEW_OK} != 'OK' ]]; do
-    if [[ ! -z $(mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "SELECT 'OK' FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '_sogo_static_view'") ]]; then
+    if [[ ! -z $(mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "SELECT 'OK' FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '_sogo_static_view'") ]]; then
       STATIC_VIEW_OK=OK
     else
       echo "Waiting for database initialization by master..."
@@ -107,9 +116,9 @@ fi
 # Recreate password update trigger
 if [[ "${MASTER}" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
   echo "We are master, preparing update trigger..."
-  mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "DROP TRIGGER IF EXISTS sogo_update_password"
+  mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "DROP TRIGGER IF EXISTS sogo_update_password"
   while [[ ${TRIGGER_OK} != 'OK' ]]; do
-  mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} << EOF
+  mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} << EOF
 DELIMITER -
 CREATE TRIGGER sogo_update_password AFTER UPDATE ON _sogo_static_view
 FOR EACH ROW
@@ -119,7 +128,7 @@ END;
 -
 DELIMITER ;
 EOF
-    if [[ ! -z $(mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "SELECT 'OK' FROM INFORMATION_SCHEMA.TRIGGERS WHERE TRIGGER_NAME = 'sogo_update_password'") ]]; then
+    if [[ ! -z $(mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -B -e "SELECT 'OK' FROM INFORMATION_SCHEMA.TRIGGERS WHERE TRIGGER_NAME = 'sogo_update_password'") ]]; then
       TRIGGER_OK=OK
     else
       echo "Will retry to setup SOGo password update trigger in 3s"
@@ -139,7 +148,7 @@ cat <<EOF > /var/lib/sogo/GNUstep/Defaults/sogod.plist
 <plist version="0.9">
 <dict>
     <key>OCSAclURL</key>
-    <string>mysql://${DBUSER}:${DBPASS}@%2Fvar%2Frun%2Fmysqld%2Fmysqld.sock/${DBNAME}/sogo_acl</string>
+    <string>${DBCONNECTION_STR_CF}/sogo_acl</string>
     <key>SOGoIMAPServer</key>
     <string>imap://${IPV4_NETWORK}.250:143/?TLS=YES&amp;tlsVerifyMode=none</string>
     <key>SOGoSieveServer</key>
@@ -151,17 +160,17 @@ cat <<EOF > /var/lib/sogo/GNUstep/Defaults/sogod.plist
     <key>SOGoEncryptionKey</key>
     <string>${RAND_PASS}</string>
     <key>OCSCacheFolderURL</key>
-    <string>mysql://${DBUSER}:${DBPASS}@%2Fvar%2Frun%2Fmysqld%2Fmysqld.sock/${DBNAME}/sogo_cache_folder</string>
+    <string>${DBCONNECTION_STR_CF}/sogo_cache_folder</string>
     <key>OCSEMailAlarmsFolderURL</key>
-    <string>mysql://${DBUSER}:${DBPASS}@%2Fvar%2Frun%2Fmysqld%2Fmysqld.sock/${DBNAME}/sogo_alarms_folder</string>
+    <string>${DBCONNECTION_STR_CF}/sogo_alarms_folder</string>
     <key>OCSFolderInfoURL</key>
-    <string>mysql://${DBUSER}:${DBPASS}@%2Fvar%2Frun%2Fmysqld%2Fmysqld.sock/${DBNAME}/sogo_folder_info</string>
+    <string>${DBCONNECTION_STR_CF}/sogo_folder_info</string>
     <key>OCSSessionsFolderURL</key>
-    <string>mysql://${DBUSER}:${DBPASS}@%2Fvar%2Frun%2Fmysqld%2Fmysqld.sock/${DBNAME}/sogo_sessions_folder</string>
+    <string>${DBCONNECTION_STR_CF}/sogo_sessions_folder</string>
     <key>OCSStoreURL</key>
-    <string>mysql://${DBUSER}:${DBPASS}@%2Fvar%2Frun%2Fmysqld%2Fmysqld.sock/${DBNAME}/sogo_store</string>
+    <string>${DBCONNECTION_STR_CF}/sogo_store</string>
     <key>SOGoProfileURL</key>
-    <string>mysql://${DBUSER}:${DBPASS}@%2Fvar%2Frun%2Fmysqld%2Fmysqld.sock/${DBNAME}/sogo_user_profile</string>
+    <string>${DBCONNECTION_STR_CF}/sogo_user_profile</string>
     <key>SOGoTimeZone</key>
     <string>${TZ}</string>
     <key>domains</key>
@@ -207,14 +216,14 @@ while read -r line gal
                     <key>prependPasswordScheme</key>
                     <string>YES</string>
                     <key>viewURL</key>
-                    <string>mysql://${DBUSER}:${DBPASS}@%2Fvar%2Frun%2Fmysqld%2Fmysqld.sock/${DBNAME}/_sogo_static_view</string>
+                    <string>${DBCONNECTION_STR_CF}/_sogo_static_view</string>
                 </dict>" >> /var/lib/sogo/GNUstep/Defaults/sogod.plist
   # Generate alternative LDAP authentication dict, when SQL authentication fails
   # This will nevertheless read attributes from LDAP
   line=${line} envsubst < /etc/sogo/plist_ldap >> /var/lib/sogo/GNUstep/Defaults/sogod.plist
   echo "            </array>
         </dict>" >> /var/lib/sogo/GNUstep/Defaults/sogod.plist
-done < <(mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "SELECT domain, CASE gal WHEN '1' THEN 'YES' ELSE 'NO' END AS gal FROM domain;" -B -N)
+done < <(mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "SELECT domain, CASE gal WHEN '1' THEN 'YES' ELSE 'NO' END AS gal FROM domain;" -B -N)
 
 # Generate footer
 echo '    </dict>

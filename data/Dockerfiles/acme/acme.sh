@@ -2,6 +2,13 @@
 set -o pipefail
 exec 5>&1
 
+# Define Mysql Connection
+if [[ -z "${DBCONNECTION}" || "${DBCONNECTION}" == "unix" ]]; then
+    DBCONNECTION_STR="--socket=/var/run/mysqld/mysqld.sock"
+else
+    DBCONNECTION_STR="--host=${DBCONNECTION}"
+fi
+
 # Do not attempt to write to slave
 if [[ ! -z ${REDIS_SLAVEOF_IP} ]]; then
   export REDIS_CMDLINE="redis-cli -h ${REDIS_SLAVEOF_IP} -p ${REDIS_SLAVEOF_PORT}"
@@ -113,7 +120,7 @@ fi
 chmod 600 ${ACME_BASE}/key.pem
 
 log_f "Waiting for database..."
-while ! mysqladmin status --socket=/var/run/mysqld/mysqld.sock -u${DBUSER} -p${DBPASS} --silent > /dev/null; do
+while ! mysqladmin status ${DBCONNECTION_STR} -u${DBUSER} -p${DBPASS} --silent > /dev/null; do
   sleep 2
 done
 log_f "Database OK"
@@ -134,7 +141,7 @@ log_f "Resolver OK"
 log_f "Waiting for domain table..."
 while [[ -z ${DOMAIN_TABLE} ]]; do
   curl --silent http://nginx/ >/dev/null 2>&1
-  DOMAIN_TABLE=$(mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "SHOW TABLES LIKE 'domain'" -Bs)
+  DOMAIN_TABLE=$(mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "SHOW TABLES LIKE 'domain'" -Bs)
   [[ -z ${DOMAIN_TABLE} ]] && sleep 10
 done
 log_f "OK" no_date
@@ -223,7 +230,7 @@ while true; do
 
   #########################################
   # IP and webroot challenge verification #
-  SQL_DOMAINS=$(mysql --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "SELECT domain FROM domain WHERE backupmx=0 and active=1" -Bs)
+  SQL_DOMAINS=$(mysql ${DBCONNECTION_STR} -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "SELECT domain FROM domain WHERE backupmx=0 and active=1" -Bs)
   if [[ ! $? -eq 0 ]]; then
     log_f "Failed to read SQL domains, retrying in 1 minute..."
     sleep 1m
