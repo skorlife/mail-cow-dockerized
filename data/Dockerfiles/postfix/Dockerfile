@@ -1,8 +1,9 @@
-FROM debian:bullseye-slim
+FROM alpine:3.17
 LABEL maintainer "Andre Peters <andre.peters@servercow.de>"
 
-ARG DEBIAN_FRONTEND=noninteractive
 ENV LC_ALL C
+
+RUN apk update && apk add dpkg
 
 RUN dpkg-divert --local --rename --add /sbin/initctl \
 	&& ln -sf /bin/true /sbin/initctl \
@@ -10,33 +11,34 @@ RUN dpkg-divert --local --rename --add /sbin/initctl \
 	&& ln -sf /bin/true /usr/bin/ischroot
 
 # Add groups and users before installing Postfix to not break compatibility
-RUN groupadd -g 102 postfix \
-  && groupadd -g 103 postdrop \
-  && useradd -g postfix -u 101 -d /var/spool/postfix -s /usr/sbin/nologin postfix \
-  && apt-get update && apt-get install -y --no-install-recommends \
+RUN addgroup -g 103 postdrop \
+  && adduser -g postfix -u 101 -h /var/spool/postfix -s /usr/sbin/nologin -D postfix \
+  && apk update && apk add \
 	ca-certificates \
+	bash \
 	curl \
 	dirmngr \
-  dnsutils \
-	gnupg \
-	libsasl2-modules \
+  bind-tools \
+	gpg \
+	libsasl \
   mariadb-client \
 	perl \
 	postfix \
 	postfix-mysql \
 	postfix-pcre \
-	redis-tools \
-	sasl2-bin \
+	redis \
+	cyrus-sasl \
 	sudo \
 	supervisor \
 	syslog-ng \
-	syslog-ng-core \
-	syslog-ng-mod-redis \
+	syslog-ng-redis \
+	syslog-ng-json \
   tzdata \
 	&& rm -rf /var/lib/apt/lists/* \
-	&& touch /etc/default/locale \
-  && printf '#!/bin/bash\n/usr/sbin/postconf -c /opt/postfix/conf "$@"' > /usr/local/sbin/postconf \
-  && chmod +x /usr/local/sbin/postconf
+#	&& touch /etc/default/locale \
+    && mkdir -p /usr/local/sbin \
+	&& printf '#!/bin/bash\n/usr/sbin/postconf -c /opt/postfix/conf "$@"' > /usr/local/sbin/postconf \
+	&& chmod +x /usr/local/sbin/postconf
 
 COPY supervisord.conf /etc/supervisor/supervisord.conf
 COPY syslog-ng.conf /etc/syslog-ng/syslog-ng.conf
