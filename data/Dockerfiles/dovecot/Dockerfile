@@ -28,8 +28,11 @@ RUN addgroup -g 5000 vmail \
   gettext \
   gpg \
   jq \
-  lz4 \
-  lz4-dev \
+  zstd \
+  make \
+  build-base \
+  perl-dev \
+  musl-obstack-dev \
   perl-ntlm \
   perl-cgi \
   perl-crypt-openssl-rsa \
@@ -43,13 +46,12 @@ RUN addgroup -g 5000 vmail \
   perl-file-copy-recursive \
   perl-file-tail \
   perl-html-parser \
-  #perl-io-socket-compress \
+  perl-compress-raw-zlib \
   perl-io-socket-inet6 \
   perl-io-socket-ssl \
-  #libio-tee-perl \
+  perl-io-tee \
   perl-ipc-run \
   perl-json-webtoken \
-  #perl-lockfile-simple \
   perl-mail-imapclient \
   perl-module-implementation \
   perl-module-scandeps \
@@ -58,7 +60,6 @@ RUN addgroup -g 5000 vmail \
   perl-package-stash-xs \
   perl-par-packer \
   perl-parse-recdescent\
-  #libproc-processtable-perl \
   #libreadonly-perl \
   perl-regexp-common \
   perl-sys-meminfo \
@@ -100,12 +101,15 @@ RUN addgroup -g 5000 vmail \
   # dovecot-managesieved \
   dovecot-pigeonhole-plugin \
   dovecot-lmtpd \
+  dovecot-openrc \
   dovecot-ldap \
   dovecot-mysql \
   dovecot-pop3d \
   dovecot-fts-solr \
   && pip3 install mysql-connector-python html2text jinja2 redis \
   && rm -rf /tmp/* /var/tmp/* /root/.cache/
+
+RUN cpanm LockFile::Simple && cpanm Proc::ProcessTable && cpanm Readonly
 
 COPY trim_logs.sh /usr/local/bin/trim_logs.sh
 COPY clean_q_aged.sh /usr/local/bin/clean_q_aged.sh
