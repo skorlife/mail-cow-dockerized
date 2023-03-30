@@ -5,7 +5,11 @@ if [[ "${SKIP_SOGO}" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
   sleep 365d
   exit 0
 fi
-
+if [[ ! -z "${SOGO_IPv4}" ]]; then
+  echo "SOGO_IPv4 detected, skipping local SOGo to use external SOGo..."
+  sleep 365d
+  exit 0
+fi
 if [[ ! -z ${REDIS_SLAVEOF_IP} ]]; then
   cp /etc/syslog-ng/syslog-ng-redis_slave.conf /etc/syslog-ng/syslog-ng.conf
 fi

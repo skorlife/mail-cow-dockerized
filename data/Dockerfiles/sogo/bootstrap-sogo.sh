@@ -16,7 +16,7 @@ while ! mysqladmin status ${DBCONNECTION_STR} -u${DBUSER} -p${DBPASS} --silent; 
 done
 
 # Wait until port becomes free and send sig
-until ! nc -z sogo-mailcow 20000;
+until ! nc -z 0.0.0.0 20000;
 do
   killall -TERM sogod
   sleep 3
@@ -140,6 +140,18 @@ fi
 # cat /dev/urandom seems to hang here occasionally and is not recommended anyway, better use openssl
 RAND_PASS=$(openssl rand -base64 16 | tr -dc _A-Z-a-z-0-9)
 
+# Get Postfix and Dovecot IPv4
+if [[ ! -z "${DOVECOT_IPv4}" ]]; then
+  DOVECOT_IP="${DOVECOT_IPv4}"
+else
+  DOVECOT_IP="${IPV4_NETWORK}.250"
+fi
+if [[ ! -z "${POSTFIX_IPv4}" ]]; then
+  POSTFIX_IP="${POSTFIX_IPv4}"
+else
+  POSTFIX_IP="${IPV4_NETWORK}.253"
+fi
+
 # Generate plist header with timezone data
 mkdir -p /var/lib/sogo/GNUstep/Defaults/
 cat <<EOF > /var/lib/sogo/GNUstep/Defaults/sogod.plist
@@ -150,11 +162,11 @@ cat <<EOF > /var/lib/sogo/GNUstep/Defaults/sogod.plist
     <key>OCSAclURL</key>
     <string>${DBCONNECTION_STR_CF}/sogo_acl</string>
     <key>SOGoIMAPServer</key>
-    <string>imap://${IPV4_NETWORK}.250:143/?TLS=YES&amp;tlsVerifyMode=none</string>
+    <string>imap://${DOVECOT_IPv4}:143/?TLS=YES&amp;tlsVerifyMode=none</string>
     <key>SOGoSieveServer</key>
-    <string>sieve://${IPV4_NETWORK}.250:4190/?TLS=YES&amp;tlsVerifyMode=none</string>
+    <string>sieve://${DOVECOT_IPv4}:4190/?TLS=YES&amp;tlsVerifyMode=none</string>
     <key>SOGoSMTPServer</key>
-    <string>smtp://${IPV4_NETWORK}.253:588/?TLS=YES&amp;tlsVerifyMode=none</string>
+    <string>smtp://${POSTFIX_IP}:588/?TLS=YES&amp;tlsVerifyMode=none</string>
     <key>SOGoTrustProxyAuthentication</key>
     <string>YES</string>
     <key>SOGoEncryptionKey</key>
