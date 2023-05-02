@@ -1,0 +1,17 @@
+version: "2.1"
+
+services:
+  sogo-mailcow:
+    volumes:
+      - ./data/conf/sogo/UIxMailFolderTemplate.wox:/etc/sogo/UIxMailFolderTemplate.wox
+      - ./data/conf/sogo/UIxMailFolderTemplate.wox:/usr/lib/GNUstep/SOGo/Templates/MailerUI/UIxMailFolderTemplate.wox
+      - ./data/conf/sogo/UIxMailFolderTemplate.wox:/sogo_web/Templates/MailerUI/UIxMailFolderTemplate.wox
+      - ./data/conf/sogo/UIxMailFolderTemplate.wox:/sogo_web/Templates/MainUI/UIxMailFolderTemplate.wox
+      - ./data/conf/sogo/SOGoRootPage.wox:/etc/sogo/SOGoRootPage.wox
+      - ./data/conf/sogo/SOGoRootPage.wox:/usr/lib/GNUstep/SOGo/Templates/MailerUI/SOGoRootPage.wox
+      - ./data/conf/sogo/SOGoRootPage.wox:/sogo_web/Templates/MailerUI/SOGoRootPage.wox
+      - ./data/conf/sogo/SOGoRootPage.wox:/sogo_web/Templates/MainUI/SOGoRootPage.wox
+      - ./data/conf/sogo/SOGoRootPage.wox:/usr/lib/GNUstep/SOGo/Templates/MainUI/SOGoRootPage.wox
+      - ./data/conf/sogo/UIxPageFrame.wox:/sogo_web/Templates/UIxPageFrame.wox
+      - ./data/conf/sogo/UIxPageFrame.wox:/usr/lib/GNUstep/SOGo/Templates/UIxPageFrame.wox
+ 

@@ -42,7 +42,6 @@ data/conf/rspamd/override.d/*
 data/conf/sogo/custom-theme.js
 data/conf/sogo/plist_ldap
 data/conf/sogo/sieve.creds
-data/conf/sogo/sogo-full.svg
 data/gitea/
 data/gogs/
 data/hooks/dovecot/*
@@ -59,10 +58,10 @@ data/web/inc/vars.local.inc.php
 data/web/inc/app_info.inc.php
 data/web/nextcloud*/
 data/web/rc*/
-docker-compose.override.yml
 mailcow.conf
 mailcow.conf_backup
 rebuild-images.sh
 refresh_images.sh
 update_diffs/
 create_cold_standby.sh
+.DS_Store
